@@ -1,0 +1,50 @@
+﻿alfresco备份和恢复
+准备工作：
+1 alfresco设置为以服务方式启动
+2 增加环境变量
+vi /etc/profile  添加
+export POSTGRESQL=/app/alfresco-community/postgresql
+export PATH=$PATH:$POSTGRESQL/bin
+使改动生效
+source /etc/profile
+
+备份：
+停止alfresco服务
+service alfresco stop
+分别拷贝dir.root指向的文件夹（这里是*/alf_data）和安装目录下solr4文件夹,删除alf_data/postgresql文件
+（alfresco安装目录中/app/alfresco-community/tomcat/shared/classes/alfresco-global.properties会提示）
+cp -rf /app/alfresco-community/solr4 /app/backup/alfresco_$(date +%Y%m%d)/
+cp -rf /app/alfresco-community/alf_data  /app/backup/alfresco_$(date +%Y%m%d)/
+rm -rf /app/backup/alfresco_$(date +%Y%m%d)/alf_data/postgresql
+备份数据库
+启动数据库
+./postgresql/scripts/ctl.sh start
+pg_dump  -U alfresco -w -h 127.0.0.1 -p 5432 -datebase alfresco > /app/backup/alfresco_$(date +%Y%m%d)/postgresql.sql
+启动alfresco服务
+
+这里自动备份是挂在jenkins（http://10.6.0.68:9333/jenkins/job/alfresco_test_backup/）上，每月1号15号跑一次，"-w"参数为免密登陆数据库，修改*/alf_data/postgresql/pg_hba.conf
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     md5
+
+md5改为trust，保存退出
+
+
+
+恢复：
+停止alfresco服务
+删除alf_data目录下的文件但保留postgresql
+删除solr4文件夹
+将备份文件拷贝至对应目录
+启动postgresel服务
+还原数据库
+psql -h 127.0.0.1 -p 5432 -U alfresco -d alfresco < /app/backup/alfresco_$(date +%Y%m%d)/postgresql.sql
+若不是空表会报error，先删除alfresco库
+dropdb -U alfresco alfresco
+切换到postgres用户创建一个空的alfresco库（root没有设置权限）
+su - postgres
+createdb  alfresco
+再用命令导入数据库
+启动alfresco服务
+
+
